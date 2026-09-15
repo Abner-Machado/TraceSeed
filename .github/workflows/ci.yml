@@ -1,0 +1,12 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo clippy --all-targets -- -D warnings
+      # The demo is the proof that capture, edit and replay still work end to end.
+      - run: ./demo.sh
