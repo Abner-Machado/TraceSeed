@@ -140,3 +140,72 @@ fn seed(attempt: u32) -> u64 {
         .as_nanos() as u64;
     (now ^ u64::from(attempt).wrapping_mul(0x9E37_79B9_7F4A_7C15)) % 100_000
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Trace {
+        let mut env = BTreeMap::new();
+        env.insert("CURRENCY".to_string(), "BRL".to_string());
+        env.insert("ACCOUNT".to_string(), "42".to_string());
+        Trace {
+            command: "./example.sh".to_string(),
+            seed: 4242,
+            input: "payment:100".to_string(),
+            env,
+            exit: 3,
+        }
+    }
+
+    #[test]
+    fn a_trace_survives_render_and_parse() {
+        let original = sample();
+        let back = Trace::parse(&original.render());
+        assert_eq!(back.command, original.command);
+        assert_eq!(back.seed, original.seed);
+        assert_eq!(back.input, original.input);
+        assert_eq!(back.env, original.env);
+        assert_eq!(back.exit, original.exit);
+    }
+
+    #[test]
+    fn env_is_rendered_sorted_so_the_file_diffs_cleanly() {
+        let text = sample().render();
+        let account = text.find("env.ACCOUNT=42").expect("ACCOUNT is rendered");
+        let currency = text.find("env.CURRENCY=BRL").expect("CURRENCY is rendered");
+        assert!(account < currency);
+        assert!(text.ends_with("exit=3\n"));
+    }
+
+    #[test]
+    fn an_input_with_an_equals_sign_is_kept_whole() {
+        let trace = Trace::parse("command=./app\nseed=1\ninput=a=b=c\nexit=1\n");
+        assert_eq!(trace.input, "a=b=c");
+    }
+
+    #[test]
+    fn unknown_lines_and_bad_numbers_fall_back_to_defaults() {
+        let trace = Trace::parse("note=hand edited\n\nseed=lots\nexit=boom\nenv.X=1\n");
+        assert_eq!(trace.seed, 0);
+        assert_eq!(trace.exit, 1);
+        assert_eq!(trace.command, "");
+        assert_eq!(trace.env.get("X").map(String::as_str), Some("1"));
+    }
+
+    #[test]
+    fn a_seed_is_short_enough_to_read_and_edit() {
+        for attempt in 0..ATTEMPTS {
+            assert!(seed(attempt) < 100_000);
+        }
+    }
+
+    #[test]
+    fn run_hands_the_recorded_conditions_to_the_command() {
+        let mut trace = sample();
+        trace.command = "echo \"$SEED/$INPUT/$CURRENCY\"; exit 3".to_string();
+        let (exit, output) = trace.run();
+        assert_eq!(exit, 3);
+        assert_eq!(output.trim(), "4242/payment:100/BRL");
+    }
+}

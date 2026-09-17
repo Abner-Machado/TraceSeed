@@ -8,5 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
       # The demo is the proof that capture, edit and replay still work end to end.
       - run: ./demo.sh
